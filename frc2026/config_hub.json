@@ -1,0 +1,17 @@
+{
+    "role": "HUB",
+    "alliance": "RED",
+    "port": 5000,
+    "server_ip": "10.17.0.141",
+    "led_pin": 10,
+    "sensor_pins": [17, 27, 22, 5],
+    "sound_path": "./wav_files/",
+    "panic_button": {                  
+        "enabled": true,
+        "method": "auto"
+    },
+    "gui": {
+        "enabled": true,
+        "refresh_rate_ms": 500
+    }
+}
