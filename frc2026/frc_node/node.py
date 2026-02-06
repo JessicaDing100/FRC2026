@@ -20,9 +20,11 @@ class FRC2026Node:
         
         # -------------------- Shared State --------------------
         self.connected_clients = []
-        self.client_number = 1 #total number of clients
+        self.client_number = 1 #ToDo: set to 1 for now with one Pi, should be 2 total number of hubs
         self.client_count = 0
         self.client_all_connected_event = threading.Event()
+        self.hub_counts = {}
+        self.handshake_lock = threading.Lock()
 
         self.current_period = "PREMATCH"
         self.panic_event = threading.Event()
@@ -30,9 +32,9 @@ class FRC2026Node:
         self.match_thread = None
         #self.score_lock = threading.Lock()
         #self.scores = {}
-        self.balls = 0
-        self.points = 0
-        self.is_active = False
+        #self.balls = 0
+        #self.points = 0
+        #self.is_active = False
 
         # -------------------- Role-specific Setup --------------------
         if self.cfg['role'] == "FMS":
@@ -40,12 +42,27 @@ class FRC2026Node:
             self.sound_manager = SoundManager(self.cfg)        
         elif self.cfg['role'] == "HUB":
             self.networking = Client(self.cfg, self)
-            self.hardware = HubHardware(self.cfg, self)
+            self.hub_hardware = HubHardware(self.cfg, self)
         else:
             raise ValueError("Invalid role in config (must be 'FMS' or 'HUB')")
         #self.gui = ScoreboardGUI(self)
         #self.panic_button = PanicButton(self)
-        
+
+    def process_hub_data(self, addr, ball_count):
+        with self.handshake_lock:
+            # Update the count for this specific hub address
+            self.hub_counts[addr] = int(ball_count)
+            # ToDo: temp testing code with one HUB
+            winner = "R"
+            print(f"[FMS] Both Hubs reported. Auto Winner: {winner}")
+            self.networking.broadcast(f"AUTO_RESULT:{winner}") 
+            # ToDo: uncomment this part for two HUBs
+            #if len(self.hub_counts) == self.client_number:
+            #    # Decide winner (Red vs Blue)
+            #    counts = list(self.hub_counts.values())
+            #    winner = "R" if counts[0] >= counts[1] else "B"
+            #    print(f"[FMS] Both Hubs reported. Auto Winner: {winner}")
+            #    self.networking.broadcast(f"AUTO_RESULT:{winner}")       
 
     # -------------------- Countdown --------------------
     def count_down(self, start_time, target_duration):
@@ -61,9 +78,9 @@ class FRC2026Node:
 
         # --- AUTONOMOUS ---
         self.current_period = "AUTONOMOUS"
-        start_time = time.time()
+        #start_time = time.time()
         self.sound_manager.play_cue("START")
-        if not self.count_down(start_time, 20): 
+        if not self.count_down(time.time(), 20): 
             return self.emergency_shutdown()
         self.sound_manager.play_cue("END_AUTO")
 
@@ -92,12 +109,13 @@ class FRC2026Node:
         start = time.time()
         while time.time() - start < seconds:
             if self.is_aborted: return False
-            time.sleep(0.1)
+            time.sleep(0.05)
         return True
      
     def emergency_shutdown(self):
         # Logic to execute when the match is killed
         #self.sound_manager.stop_all()
+        self.is_aborted = True
         self.sound_manager.play_cue("STOP")
         self.current_period = "ABORTED"
         print("Match safely terminated.")
@@ -105,8 +123,8 @@ class FRC2026Node:
 
 
     def hub_loop(self):
-        #self.hardware.hub_loop(panic_event=self.panic_event)
-        self.hardware.hub_loop()
+        #self.hub_hardware.hub_loop(panic_event=self.panic_event)
+        self.hub_hardware.hub_loop()
 
     def keyboard_button(self):
         import keyboard
@@ -127,7 +145,7 @@ class FRC2026Node:
         try: 
             while True:
                 # Wait for 'S' to start instead of Enter to keep it consistent
-                print("[FMS] Press 'S' to start the match...")
+                print("[FMS] Press 's' to start the match...")
                 keyboard.wait('s') 
             
                 self.is_aborted = False
@@ -139,7 +157,7 @@ class FRC2026Node:
                 # Start the match timeline
                 self.match_thread = threading.Thread(target=self.master_loop, daemon=True)
                 self.match_thread.start()
-            
+                print("[FMS] Press 'p' to stop the match...")
                 # Wait for the match to finish or be aborted before allowing a restart
                 self.match_thread.join() 
                 print("[FMS] Match sequence finished. Ready for next.")          
@@ -169,4 +187,4 @@ class FRC2026Node:
                 self.hub_loop_main()
         finally:
             pass
-            #self.hardware.cleanup()
+            #self.hub_hardware.cleanup()
