@@ -25,6 +25,7 @@ class FRC2026Node:
         self.client_all_connected_event = threading.Event()
         self.hub_number = self.cfg['hub_number']
         self.hub_counts = {}
+        self.alliance_scores = {'R': 0, 'B': 0}
         self.handshake_lock = threading.Lock()
 
         self.current_period = "PREMATCH"
@@ -54,10 +55,11 @@ class FRC2026Node:
         #self.gui = ScoreboardGUI(self)
         #self.panic_button = PanicButton(self)
 
-    def process_hub_data(self, addr, ball_count):
+    def process_hub_data(self, addr, alliance, ball_count):
         with self.handshake_lock:
             # Update the count for this specific hub address
             self.hub_counts[addr] = int(ball_count)
+            self.alliance_scores[alliance] = int(ball_count)
             # ToDo: temp testing code with one HUB
             #winner = "R"
             #print(f"[FMS] Both Hubs reported. Auto Winner: {winner}")
@@ -65,13 +67,21 @@ class FRC2026Node:
             # ToDo: uncomment this part for two HUBs
             if len(self.hub_counts) == self.hub_number:
                 # Decide winner (Red vs Blue)
-                counts = list(self.hub_counts.values())
-                if len(counts) >= 2:
-                    winner = "R" if counts[0] >= counts[1] else "B"
-                    print(f"[FMS] Both Hubs reported. Auto Winner: {winner}")
-                    self.networking.broadcast(f"AUTO_RESULT:{winner}")
+                # Q: what if tie?
+                # Direct lookup by alliance key avoids the list index issues
+                red_total = self.alliance_scores.get('R', 0)
+                blue_total = self.alliance_scores.get('B', 0)
+
+                if red_total >= blue_total:
+                    winner = "R"
+                elif blue_total > red_total:
+                    winner = "B"
                 else:
-                    print(f"[FMS] Waiting for second hub data... (Currently have {len(counts)})")
+                    winner = "TIE" # Optional: handle equal scores
+                print(f"[FMS] Both Hubs reported. Auto Winner: {winner}")
+                self.networking.broadcast(f"AUTO_RESULT:{winner}")
+            else:
+                print(f"[FMS] Waiting for second hub data... (Currently have {len(self.hub_counts)})")
 
     # -------------------- Countdown --------------------
     def count_down(self, start_time, target_duration):
@@ -84,7 +94,8 @@ class FRC2026Node:
 
     # -------------------- Game Loops --------------------
     def master_loop(self):
-
+        self.hub_counts = {}
+        self.alliance_scores = {'R': 0, 'B': 0}
         # --- AUTONOMOUS ---
         self.current_period = "AUTONOMOUS"
         #start_time = time.time()
@@ -112,6 +123,8 @@ class FRC2026Node:
 
         self.current_period = "POSTMATCH"
         print("[FMS] Match complete. Waiting for post-match processing...")
+        self.hub_counts = {}
+        self.alliance_scores = {'R': 0, 'B': 0}
         time.sleep(5)
 
     def interruptible_sleep(self, seconds):
@@ -129,6 +142,8 @@ class FRC2026Node:
         self.current_period = "ABORTED"
         self.networking.broadcast("GAME_STOP")
         self.sound_manager.play_cue("STOP")
+        self.hub_counts = {}
+        self.alliance_scores = {'R': 0, 'B': 0}
         print("Match safely terminated.")
         return False
 
