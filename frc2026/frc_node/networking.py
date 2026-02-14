@@ -73,7 +73,7 @@ class Client:
         self.node = node
         self.FORMAT = 'utf-8'
         self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.client.connect((cfg.get('server_ip','10.17.0.141'), cfg.get("port",5000)))
+        self.client.connect((cfg.get('server_ip','10.17.0.162'), cfg.get("port",5000)))
     
     def send_to_server(self, msg):
         try: self.client.send(msg.encode(self.FORMAT))
@@ -95,6 +95,7 @@ class Client:
                 elif msg == "DATA_ACK":
                     print("[HUB] FMS confirmed receipt of data.")
                     # Optional: trigger a small green LED flash on the hub here
+                    self.node.hub_hardware.ack_received_signal.set()
                 elif msg.startswith("AUTO_RESULT:"):
                     self.node.hub_hardware.auto_winner = msg.split(":")[1]
                     self.node.hub_hardware.teleop_ready_signal.set()
@@ -103,6 +104,7 @@ class Client:
                     # Set the flag that your master_loop is checking
                     self.node.is_aborted = True
                     self.node.hub_hardware.teleop_ready_signal.set()
+                    self.node.hub_hardware.ack_received_signal.set()
                     # Optional: notify your node's event object if using one
                     self.node.panic_event.set()
             except Exception as e:
