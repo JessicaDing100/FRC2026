@@ -1,11 +1,15 @@
 {
     "role": "FMS",
+    "pi_ver": 5,
+    "client_number": 2,
+    "hub_number": 2,
     "alliance": "RED",
     "port": 5000,
-    "server_ip": "10.17.0.141",
+    "server_ip": "10.17.0.162",
     "led_pin": 10,
     "sensor_pins": [17, 27, 22, 5],
     "sound_path": "./wav_files/",
+    "button_path": "/dev/input/by-id/usb-LinTx_LinTx_Keyboard_BE2F48FE-if01-event-kbd",
     "panic_button": {                  
         "enabled": true,
         "method": "auto"
