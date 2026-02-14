@@ -6,7 +6,7 @@ import math
 #    HAS_GPIO = True
 #except ImportError:
 #    HAS_GPIO = False
-#from pi5neo import Pi5Neo  # enable on HUBs
+from pi5neo import Pi5Neo  # enable on HUBs
 
 class HubHardware:
     def __init__(self, cfg, node):
@@ -20,6 +20,7 @@ class HubHardware:
         self.auto_winner = None
         self.ack_received = False
         self.teleop_ready_signal = threading.Event()
+        self.ack_received_signal = threading.Event()
         #self.sensor_pins = cfg.get("sensor_pins", [])
         #if HAS_GPIO and self.sensor_pins:
         #    GPIO.setmode(GPIO.BCM)
@@ -77,7 +78,7 @@ class HubHardware:
         self.is_active = True
         start_time = time.time()
         self.led_animator()
-        if not self.count_down(start_time, 17): 
+        if not self.count_down(start_time, 17):
             return self.emergency_shutdown()
         
         #mid_time = time.time()
@@ -93,20 +94,15 @@ class HubHardware:
      
         self.is_active = False
         self.led_animator()
-        #end_time = time.time()
-        #print("[HUB] total period duration", 20)
-        #print("[HUB] count down start @", round(mid_time-start_time))
-        #print("[HUB] end @", round(end_time-start_time))
-        #print("[HUB] Hub loop complete")
-        
+
         if not self.interruptible_sleep(3): return self.emergency_shutdown()
 
         # --- 2. TRANSITION & HANDSHAKE (10s) ---
         self.is_active = True        
         self.led_animator()
         #start_time = time.time()
-        #if not self.count_down(start_time, 10): 
-        #    return self.emergency_shutdown() 
+        #if not self.count_down(start_time, 10):
+        #    return self.emergency_shutdown()
 
         transition_start = time.time()
         last_retry = 0
@@ -118,15 +114,17 @@ class HubHardware:
             # If FMS hasn't ACKed yet, retry every 2 seconds
             if not self.ack_received and (time.time() - last_retry > 2.0):
                 print(f"[HUB] Sending ball count ({self.balls_detected})...")
+                if self.my_alliance = "R":
+                
                 self.node.networking.send_to_server(f"HUB_SCORE:{self.balls_detected}")
                 last_retry = time.time()
             
-            # Check if the FMS broadcasted the final AUTO_RESULT
-            if self.teleop_ready_signal.is_set():
+            # Check if the FMS received the ball count
+            if self.ack_received_signal.is_set():
                self.ack_received = True
                 
             time.sleep(0.05)
-
+        # Check if the FMS broadcasted the final AUTO_RESULT
         if not self.teleop_ready_signal.is_set():
             print("[HUB] Failed to receive match sync from FMS!")
             return self.emergency_shutdown()
