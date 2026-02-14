@@ -1,6 +1,7 @@
 import time
 import threading
 import math
+import random
 #try:
 #    import RPi.GPIO as GPIO
 #    HAS_GPIO = True
@@ -13,7 +14,7 @@ class HubHardware:
         self.cfg = cfg
         self.node = node
         self.is_active = False
-        self.balls_detected = 100
+        self.balls_detected = random.randint(50,300)
         self.strip = Pi5Neo('/dev/spidev0.0', 150, 800)
         self.color = (255,0,0) if cfg['alliance']=="RED" else (0,0,255)
         self.my_alliance = "R" if cfg['alliance']=="RED" else "B"
