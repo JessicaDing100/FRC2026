@@ -49,6 +49,30 @@ class HubHardware:
             self.strip.fill_strip(0,0,0)
         self.strip.update_strip()
 
+    def led_blink(self, is_active, start_time, seconds):
+        if is_active:
+            self.is_active = True
+            self.led_animator()
+            if not self.count_down(start_time, seconds-3):
+                return self.emergency_shutdown()
+
+            # Pulse to indicate end of the period
+            for _ in range(4):
+                self.is_active = False
+                self.led_animator()
+                if not self.interruptible_sleep(0.25): return self.emergency_shutdown()
+                self.is_active = True
+                if not self.interruptible_sleep(0.25): return self.emergency_shutdown()
+                self.led_animator()
+            self.is_active = False
+            self.led_animator()
+        else:
+            self.is_active = False
+            self.led_animator()
+            if not self.count_down(start_time, seconds):
+                return self.emergency_shutdown()
+        
+
     def interruptible_sleep(self, seconds):
         """Replacement for time.sleep that checks for panic flag every 0.05s."""
         stop_at = time.time() + seconds
@@ -78,41 +102,20 @@ class HubHardware:
     def hub_loop(self):
         # --- 1. AUTO (20s) & ASSESSMENT (3s) ---
         print("[HUB] AUTO (20s)")
-        self.is_active = True
         start_time = time.time()
-        self.led_animator()
-        if not self.count_down(start_time, 17):
-            return self.emergency_shutdown()
-        
-        #mid_time = time.time()
-
-        # Pulse to indicate end (when pulse is needed?)
-        for _ in range(4):
-            self.is_active = False
-            self.led_animator()
-            if not self.interruptible_sleep(0.25): return self.emergency_shutdown()
-            self.is_active = True
-            if not self.interruptible_sleep(0.25): return self.emergency_shutdown()
-            self.led_animator()
-     
-        self.is_active = False
-        self.led_animator()
-
+        self.led_blink(True, start_time, 20)
+        #---- sleep 3 seconds
         if not self.interruptible_sleep(3): return self.emergency_shutdown()
 
         # --- 2. TRANSITION & HANDSHAKE (10s) ---
         print("[HUB] TELEOP (10s)")
         self.is_active = True
         self.led_animator()
-        #start_time = time.time()
-        #if not self.count_down(start_time, 10):
-        #    return self.emergency_shutdown()
-
         transition_start = time.time()
         last_retry = 0
-        
-        # This loop handles both the 10s timeout AND the retry logic
-        while (time.time() - transition_start) < 10.0:
+
+        # This loop handles both the 5s timeout AND the retry logic
+        while (time.time() - transition_start) < 5.0:
             if self.node.is_aborted: return self.emergency_shutdown()
             
             # If FMS hasn't ACKed yet, retry every 2 seconds
@@ -135,6 +138,8 @@ class HubHardware:
             print("[HUB] Failed to receive match sync from FMS!")
             return self.emergency_shutdown()
 
+        self.led_blink(True, time.time(), 5)
+
         # --- 3. TELEOP SHIFTS --- (Table 6-3)
         # Each Shift is 25 seconds (example duration)
         shifts = [
@@ -150,26 +155,17 @@ class HubHardware:
             won_auto = (self.auto_winner == self.my_alliance)
             is_odd = (i % 2 != 0)
             self.is_active = not is_odd if won_auto else is_odd
-            #print(self.is_active)
             print(f"[HUB] {shift['name']} - Active: {self.is_active}")
-            self.led_animator() # Update LEDs to show state
-
             # Run the shift timer
             start_shift = time.time()
-            if not self.node.count_down(start_shift, shift['duration']):
-                return self.emergency_shutdown()
+            self.led_blink(self.is_active, start_shift, shift['duration'] )
 
         # --- 4. ENDGAME --- (Final 30s)
         # Table 6-3: Both Hubs are ALWAYS active during End Game
         print("[HUB] ENDGAME (30s)")
-        self.is_active = True
-        self.led_animator()
-        if not self.node.count_down(time.time(), 30):
-            return self.emergency_shutdown()
+        self.led_blink(True, time.time(), 30)
 
         print("[HUB] Match Complete")
-        self.is_active = False
-        self.led_animator()
         self.ack_received = False
 
     #def cleanup(self):
