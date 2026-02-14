@@ -20,9 +20,10 @@ class FRC2026Node:
 
         # -------------------- Shared State --------------------
         self.connected_clients = []
-        self.client_number = 1 #ToDo: set to 1 for now with one Pi, should be 2 total number of hubs
+        self.client_number = self.cfg['client_number'] #ToDo: set to 1 for now with one hub, should be 2 total number of hubs
         self.client_count = 0
         self.client_all_connected_event = threading.Event()
+        self.hub_number = self.cfg['hub_number']
         self.hub_counts = {}
         self.handshake_lock = threading.Lock()
 
@@ -58,16 +59,19 @@ class FRC2026Node:
             # Update the count for this specific hub address
             self.hub_counts[addr] = int(ball_count)
             # ToDo: temp testing code with one HUB
-            winner = "R"
-            print(f"[FMS] Both Hubs reported. Auto Winner: {winner}")
-            self.networking.broadcast(f"AUTO_RESULT:{winner}") 
+            #winner = "R"
+            #print(f"[FMS] Both Hubs reported. Auto Winner: {winner}")
+            #self.networking.broadcast(f"AUTO_RESULT:{winner}") 
             # ToDo: uncomment this part for two HUBs
-            #if len(self.hub_counts) == self.client_number:
-            #    # Decide winner (Red vs Blue)
-            #    counts = list(self.hub_counts.values())
-            #    winner = "R" if counts[0] >= counts[1] else "B"
-            #    print(f"[FMS] Both Hubs reported. Auto Winner: {winner}")
-            #    self.networking.broadcast(f"AUTO_RESULT:{winner}")
+            if len(self.hub_counts) == self.hub_number:
+                # Decide winner (Red vs Blue)
+                counts = list(self.hub_counts.values())
+                if len(counts) >= 2:
+                    winner = "R" if counts[0] >= counts[1] else "B"
+                    print(f"[FMS] Both Hubs reported. Auto Winner: {winner}")
+                    self.networking.broadcast(f"AUTO_RESULT:{winner}")
+                else:
+                    print(f"[FMS] Waiting for second hub data... (Currently have {len(counts)})")
 
     # -------------------- Countdown --------------------
     def count_down(self, start_time, target_duration):
@@ -214,4 +218,3 @@ class FRC2026Node:
         finally:
             pass
             #self.hub_hardware.cleanup()
-
