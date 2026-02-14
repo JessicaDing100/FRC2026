@@ -71,11 +71,13 @@ class HubHardware:
         print("[HUB] !!! ABORTING HUB LOOP !!!")
         self.is_active = False
         self.led_animator()
+        self.ack_received = False
         # If you have a buzzer or specific 'stop' animation, trigger it here
         return False
 
     def hub_loop(self):
         # --- 1. AUTO (20s) & ASSESSMENT (3s) ---
+        print("[HUB] AUTO (20s)")
         self.is_active = True
         start_time = time.time()
         self.led_animator()
@@ -99,7 +101,8 @@ class HubHardware:
         if not self.interruptible_sleep(3): return self.emergency_shutdown()
 
         # --- 2. TRANSITION & HANDSHAKE (10s) ---
-        self.is_active = True        
+        print("[HUB] TELEOP (10s)")
+        self.is_active = True
         self.led_animator()
         #start_time = time.time()
         #if not self.count_down(start_time, 10):
@@ -115,9 +118,11 @@ class HubHardware:
             # If FMS hasn't ACKed yet, retry every 2 seconds
             if not self.ack_received and (time.time() - last_retry > 2.0):
                 print(f"[HUB] Sending ball count ({self.balls_detected})...")
-                if self.my_alliance = "R":
-                
-                self.node.networking.send_to_server(f"HUB_SCORE:{self.balls_detected}")
+                if self.my_alliance == "R":
+                    self.node.networking.send_to_server(f"HUB_SCORE:R:{self.balls_detected}")
+                else:
+                    self.node.networking.send_to_server(f"HUB_SCORE:B:{self.balls_detected}")
+
                 last_retry = time.time()
             
             # Check if the FMS received the ball count
@@ -156,6 +161,7 @@ class HubHardware:
 
         # --- 4. ENDGAME --- (Final 30s)
         # Table 6-3: Both Hubs are ALWAYS active during End Game
+        print("[HUB] ENDGAME (30s)")
         self.is_active = True
         self.led_animator()
         if not self.node.count_down(time.time(), 30):
@@ -164,6 +170,7 @@ class HubHardware:
         print("[HUB] Match Complete")
         self.is_active = False
         self.led_animator()
+        self.ack_received = False
 
     #def cleanup(self):
     #    if HAS_GPIO and self.sensor_pins:
