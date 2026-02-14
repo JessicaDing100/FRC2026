@@ -44,9 +44,9 @@ class Server:
                 #print(msg)
                 print(f"[CLIENT {addr}] {msg}")
                 if ":" in msg:
-                    header, val = msg.split(":")
+                    header, alliance, val = msg.split(":")
                     if header == "HUB_SCORE":
-                        self.node.process_hub_data(addr, val)
+                        self.node.process_hub_data(addr, alliance, val)
                         conn.send("DATA_ACK".encode(self.FORMAT))
                 elif msg == self.DISCONNECT_MESSAGE:
                     connected = False
@@ -103,8 +103,8 @@ class Client:
                     print("[HUB] !!! EMERGENCY STOP RECEIVED !!!")
                     # Set the flag that your master_loop is checking
                     self.node.is_aborted = True
-                    self.node.hub_hardware.teleop_ready_signal.set()
-                    self.node.hub_hardware.ack_received_signal.set()
+                    self.node.hub_hardware.teleop_ready_signal.clear()
+                    self.node.hub_hardware.ack_received_signal.clear()
                     # Optional: notify your node's event object if using one
                     self.node.panic_event.set()
             except Exception as e:
