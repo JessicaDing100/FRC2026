@@ -1,13 +1,14 @@
 import time
 import threading
-import math
+#import math
 import random
 #try:
 #    import RPi.GPIO as GPIO
 #    HAS_GPIO = True
 #except ImportError:
 #    HAS_GPIO = False
-from pi5neo import Pi5Neo  # enable on HUBs
+#from pi5neo import Pi5Neo  # enable on HUBs
+from .led import LedManager
 
 class HubHardware:
     def __init__(self, cfg, node):
@@ -15,7 +16,7 @@ class HubHardware:
         self.node = node
         self.is_active = False
         self.balls_detected = random.randint(50,300)
-        self.strip = Pi5Neo('/dev/spidev0.0', 150, 800)
+        self.strip = LedManager(150)
         self.color = (255,0,0) if cfg['alliance']=="RED" else (0,0,255)
         self.my_alliance = "R" if cfg['alliance']=="RED" else "B"
         self.auto_winner = None
@@ -44,10 +45,9 @@ class HubHardware:
 
     def led_animator(self):
         if self.is_active:
-            self.strip.fill_strip(*self.color)
+            self.strip.fill(*self.color)
         else:
-            self.strip.fill_strip(0,0,0)
-        self.strip.update_strip()
+            self.strip.fill(0,0,0)
 
     def led_blink(self, is_active, start_time, seconds):
         if is_active:
