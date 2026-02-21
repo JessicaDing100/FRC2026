@@ -13,6 +13,7 @@ class Server:
         self.SERVER = '0.0.0.0'
         self.ADDR = (self.SERVER, self.PORT)
         self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.server.bind(self.ADDR)
         self.server.listen()
 
@@ -110,3 +111,4 @@ class Client:
             except Exception as e:
                 print(f"[HUB] Error: {e}")
                 break
+
