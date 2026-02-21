@@ -206,6 +206,7 @@ class FRC2026Node:
                 print("[FMS] Match sequence finished. Ready for next.")
                 time.sleep(1)
         except KeyboardInterrupt:
+            self.networking.server.close()
             print("[FMS] Shutting down.")
 
     # -------------------- Main Loops --------------------
@@ -218,6 +219,8 @@ class FRC2026Node:
         try:
             while True: time.sleep(1)
         except KeyboardInterrupt:
+            #ToDo: what else need to be clean up?
+            self.networking.server.close()
             print("[FMS] Shutting down.")
 
     def hub_loop_main(self):
