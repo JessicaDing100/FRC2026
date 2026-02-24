@@ -2,8 +2,10 @@ import json
 import os
 import threading
 import time
+import random
 from datetime import datetime
 
+from .gui_config import ConfigGui
 from .networking import Server, Client
 from .hub import HubHardware
 from .sound import SoundManager
@@ -20,11 +22,12 @@ class FRC2026Node:
 
         # -------------------- Shared State --------------------
         self.connected_clients = []
-        self.client_number = self.cfg['client_number'] #ToDo: set to 1 for now with one hub, should be 2 total number of hubs
+        self.client_number = 0
         self.client_count = 0
         self.client_all_connected_event = threading.Event()
-        self.hub_number = self.cfg['hub_number']
+        self.hub_number = 0
         self.hub_counts = {}
+        self.auto_winner_mode = 'S';
         self.alliance_scores = {'R': 0, 'B': 0}
         self.handshake_lock = threading.Lock()
 
@@ -60,25 +63,28 @@ class FRC2026Node:
             # Update the count for this specific hub address
             self.hub_counts[addr] = int(ball_count)
             self.alliance_scores[alliance] = int(ball_count)
-            # ToDo: temp testing code with one HUB
-            #winner = "R"
-            #print(f"[FMS] Both Hubs reported. Auto Winner: {winner}")
-            #self.networking.broadcast(f"AUTO_RESULT:{winner}") 
-            # ToDo: uncomment this part for two HUBs
-            if len(self.hub_counts) == self.hub_number:
-                # Decide winner (Red vs Blue)
-                # Q: what if tie?
-                # Direct lookup by alliance key avoids the list index issues
-                red_total = self.alliance_scores.get('R', 0)
-                blue_total = self.alliance_scores.get('B', 0)
 
-                if red_total >= blue_total:
-                    winner = "R"
-                elif blue_total > red_total:
-                    winner = "B"
+            if len(self.hub_counts) == self.hub_number:
+                if self.hub_number == 1:
+                    winner = self.auto_winner_mode
+                    print(f"[FMS] Auto Winner set to: {winner}")
                 else:
-                    winner = "TIE" # Optional: handle equal scores
-                print(f"[FMS] Both Hubs reported. Auto Winner: {winner}")
+                    if self.auto_winner_mode == 'S':
+                        # Decide winner (Red vs Blue)
+                        # Q: what if tie? Randomly choose the winner
+                        # Direct lookup by alliance key avoids the list index issues
+                        red_total = self.alliance_scores.get('R', 0)
+                        blue_total = self.alliance_scores.get('B', 0)
+
+                        if red_total > blue_total:
+                            winner = "R"
+                        elif blue_total > red_total:
+                            winner = "B"
+                        else:
+                            winner = random.choice(["R", "B"])
+                    else:
+                        winner = self.auto_winner_mode
+                    print(f"[FMS] Both Hubs reported. Auto Winner: {winner}")
                 self.networking.broadcast(f"AUTO_RESULT:{winner}")
             else:
                 print(f"[FMS] Waiting for second hub data... (Currently have {len(self.hub_counts)})")
@@ -211,6 +217,19 @@ class FRC2026Node:
 
     # -------------------- Main Loops --------------------
     def fms_loop(self):
+        launcher = ConfigGui()
+        config = launcher.get_config()
+        self.hub_number = config["hubs"]
+        self.client_number = config["clients"]
+        self.auto_winner_mode = config["winner_mode"]
+        print(f"Mode Selected: {self.auto_winner_mode}")
+        if self.auto_winner_mode == 'R':
+            print("Manual override: Red Alliance wins.")
+        elif self.auto_winner_mode == 'B':
+            print("Manual override: Blue Alliance wins.")
+        else:
+            print("Automatic: Calculating winner based on scores.")
+                
         #self.physical_button.start_listening(callback=self.handle_physical_button)
         #threading.Thread(target=self.keyboard_button, daemon=True).start()
         #threading.Thread(target=self.gui.run, daemon=True).start()
