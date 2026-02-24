@@ -10,7 +10,7 @@ class SoundManager:
             "START": "start_CalvaryCharge.wav",
             "END_AUTO": "end_Buzzer.wav",
             "TELEOP": "resume_Bells.wav",
-            "SHIFT": "PowerUpReplacement.wav",
+            "SHIFT": "match_powerup.wav",
             "WHISTLE": "warning_SteamWhistle.wav",
             "ENDGAME": "Buzzer.wav",
             "STOP": "Foghorn.wav"
@@ -25,3 +25,4 @@ class SoundManager:
     def play_cue(self,name):
         if name in self.sounds:
             self.sounds[name].play()
+
