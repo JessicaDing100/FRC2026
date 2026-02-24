@@ -14,6 +14,8 @@ frc2026/
 │
 
 └─ wav_files/               # All sound files
+Note: match_powerup.wav found from https://github.com/Team254/cheesy-arena/commit/19f168147710f02d770495f09c15399ac2e88268
+
 
 The Full "Double Handshake" Flow
 This creates a very robust chain of events during those first 10 seconds:
@@ -25,3 +27,4 @@ Hub → Hardware: Switches to Table 6-3 behavior based on being the winner or lo
 In hub_loop, if FMS doesn't receive the DATA_ACK within 2 seconds of sennding ball count, 
 the Hub re-send the message. 
 This ensures the FMS eventually gets the data even if there was a momentary signal drop.
+
