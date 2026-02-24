@@ -1,8 +1,5 @@
 {
     "role": "FMS",
-    "pi_ver": 5,
-    "client_number": 2,
-    "hub_number": 2,
     "alliance": "RED",
     "port": 5000,
     "server_ip": "10.17.0.162",
@@ -19,3 +16,4 @@
         "refresh_rate_ms": 500
     }
 }
+
