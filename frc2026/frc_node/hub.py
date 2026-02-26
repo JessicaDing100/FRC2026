@@ -15,6 +15,7 @@ class HubHardware:
         self.cfg = cfg
         self.node = node
         self.is_active = False
+        self.is_blink = False
         self.balls_detected = random.randint(50,300)
         self.strip = LedManager(150)
         self.color = (255,0,0) if cfg['alliance']=="RED" else (0,0,255)
@@ -36,38 +37,34 @@ class HubHardware:
         #self.flash_led()
         print(f"[HUB] Ball detected on pin {channel}")
 
-    def flash_led(self, duration=0.2):
-        self.is_active=False
-        self.led_animator()
-        time.sleep(duration)
-        self.is_active=True
-        self.led_animator()
-
     def led_animator(self):
         if self.is_active:
             self.strip.fill(*self.color)
         else:
             self.strip.fill(0,0,0)
 
-    def led_blink(self, is_active, start_time, seconds):
-        if is_active:
-            self.is_active = True
+    def led_blink(self, start_time, seconds):
+        if self.is_active:
             self.led_animator()
-            if not self.count_down(start_time, seconds-3):
-                return self.emergency_shutdown()
+            if self.is_blink:
+                if not self.count_down(start_time, seconds-3):
+                    return self.emergency_shutdown()
 
-            # Pulse to indicate end of the period
-            for _ in range(4):
+                # Pulse to indicate end of the period
+                for _ in range(4):
+                    self.is_active = False
+                    self.led_animator()
+                    if not self.interruptible_sleep(0.25): return self.emergency_shutdown()
+                    self.is_active = True
+                    if not self.interruptible_sleep(0.25): return self.emergency_shutdown()
+                    self.led_animator()
                 self.is_active = False
                 self.led_animator()
-                if not self.interruptible_sleep(0.25): return self.emergency_shutdown()
-                self.is_active = True
-                if not self.interruptible_sleep(0.25): return self.emergency_shutdown()
-                self.led_animator()
-            self.is_active = False
-            self.led_animator()
+            else:
+                if not self.count_down(start_time, seconds):
+                    return self.emergency_shutdown()
+                
         else:
-            self.is_active = False
             self.led_animator()
             if not self.count_down(start_time, seconds):
                 return self.emergency_shutdown()
@@ -89,7 +86,7 @@ class HubHardware:
                 return False  # Tell the caller we need to stop
             time.sleep(0.05)   # Check for abort flag every 100ms
         return True
-    
+
     def emergency_shutdown(self):
         """Forces LEDs off and exits logic."""
         print("[HUB] !!! ABORTING HUB LOOP !!!")
@@ -102,8 +99,10 @@ class HubHardware:
     def hub_loop(self):
         # --- 1. AUTO (20s) & ASSESSMENT (3s) ---
         print("[HUB] AUTO (20s)")
+        self.is_active = True
+        self.is_blink = False
         start_time = time.time()
-        self.led_blink(True, start_time, 20)
+        self.led_blink(start_time, 20)
         #---- sleep 3 seconds
         if not self.interruptible_sleep(3): return self.emergency_shutdown()
 
@@ -117,7 +116,7 @@ class HubHardware:
         # This loop handles both the 5s timeout AND the retry logic
         while (time.time() - transition_start) < 5.0:
             if self.node.is_aborted: return self.emergency_shutdown()
-            
+
             # If FMS hasn't ACKed yet, retry every 2 seconds
             if not self.ack_received and (time.time() - last_retry > 2.0):
                 print(f"[HUB] Sending ball count ({self.balls_detected})...")
@@ -127,18 +126,23 @@ class HubHardware:
                     self.node.networking.send_to_server(f"HUB_SCORE:B:{self.balls_detected}")
 
                 last_retry = time.time()
-            
+
             # Check if the FMS received the ball count
             if self.ack_received_signal.is_set():
                self.ack_received = True
-                
+
             time.sleep(0.05)
         # Check if the FMS broadcasted the final AUTO_RESULT
         if not self.teleop_ready_signal.is_set():
             print("[HUB] Failed to receive match sync from FMS!")
             return self.emergency_shutdown()
 
-        self.led_blink(True, time.time(), 5)
+        won_auto = (self.auto_winner == self.my_alliance)
+        if won_auto:
+            self.is_blink = True
+        else:
+            self.is_blink = False
+        self.led_blink(time.time(), 5)
 
         # --- 3. TELEOP SHIFTS --- (Table 6-3)
         # Each Shift is 25 seconds (example duration)
@@ -152,18 +156,23 @@ class HubHardware:
         for i, shift in enumerate(shifts, 1):
             # Determine Activity based on Table 6-3 logic
             # If we won Auto, we are inactive on odd shifts (1, 3)
-            won_auto = (self.auto_winner == self.my_alliance)
             is_odd = (i % 2 != 0)
             self.is_active = not is_odd if won_auto else is_odd
             print(f"[HUB] {shift['name']} - Active: {self.is_active}")
+            if i == 4:
+                self.is_blink = False
+            else:
+                self.is_blink = True
             # Run the shift timer
             start_shift = time.time()
-            self.led_blink(self.is_active, start_shift, shift['duration'] )
+            self.led_blink(start_shift, shift['duration'] )
 
         # --- 4. ENDGAME --- (Final 30s)
         # Table 6-3: Both Hubs are ALWAYS active during End Game
         print("[HUB] ENDGAME (30s)")
-        self.led_blink(True, time.time(), 30)
+        self.is_active = True
+        self.is_blink = False
+        self.led_blink(time.time(), 30)
 
         print("[HUB] Match Complete")
         self.ack_received = False
