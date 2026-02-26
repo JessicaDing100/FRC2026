@@ -7,10 +7,12 @@ frc2026/
 │   ├─ __init__.py
 │   ├─ node.py              # Main FRC2026Node class
 │   ├─ networking.py        # Server/Client networking
-│   ├─ hardware.py          # HUB hardware (LEDs, GPIO, sensors)
+│   ├─ hub.py               # HUB loop control (LEDs, GPIO, sensors)
+│   ├─ led.py               # HUB LEDs
 │   ├─ sound.py             # SoundManager for cues
-│   ├─ gui.py               # ScoreboardGUI
-│   └─ panic.py             # PanicButton (USB / keyboard)
+│   ├─ button.py            # PanicButton
+│   ├─ gui_config.py        # ConfigGUI
+│   └─ gui.py               # ScoreboardGUI
 │
 
 └─ wav_files/               # All sound files
@@ -27,4 +29,5 @@ Hub → Hardware: Switches to Table 6-3 behavior based on being the winner or lo
 In hub_loop, if FMS doesn't receive the DATA_ACK within 2 seconds of sennding ball count, 
 the Hub re-send the message. 
 This ensures the FMS eventually gets the data even if there was a momentary signal drop.
+
 
