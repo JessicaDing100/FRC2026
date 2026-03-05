@@ -313,6 +313,8 @@ class FRC2026Node:
             elif self.cfg['role'] == "HUB":
                 self.hub_loop_main()
         finally:
-            pass
-            #self.hub_hardware.cleanup()
-
+            if self.cfg['role'] == "FMS":
+                self.networking.server.close()
+            elif self.cfg['role'] == "HUB":
+                print("Clean up Hub")
+                self.hub_hardware.cleanup()
