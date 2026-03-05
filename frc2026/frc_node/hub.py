@@ -9,6 +9,7 @@ import random
 #    HAS_GPIO = False
 #from pi5neo import Pi5Neo  # enable on HUBs
 from .led import LedManager
+from .motor_controller import TalonPWM
 
 class HubHardware:
     def __init__(self, cfg, node):
@@ -24,6 +25,9 @@ class HubHardware:
         self.ack_received = False
         self.teleop_ready_signal = threading.Event()
         self.ack_received_signal = threading.Event()
+
+        self.motor_pin = cfg.get("motor_pin", 18)
+        self.talon = TalonPWM(self.motor_pin)
         #self.sensor_pins = cfg.get("sensor_pins", [])
         #if HAS_GPIO and self.sensor_pins:
         #    GPIO.setmode(GPIO.BCM)
@@ -63,12 +67,11 @@ class HubHardware:
             else:
                 if not self.count_down(start_time, seconds):
                     return self.emergency_shutdown()
-                
         else:
             self.led_animator()
             if not self.count_down(start_time, seconds):
                 return self.emergency_shutdown()
-        
+
 
     def interruptible_sleep(self, seconds):
         """Replacement for time.sleep that checks for panic flag every 0.05s."""
@@ -98,7 +101,8 @@ class HubHardware:
 
     def hub_loop(self):
         # --- 1. AUTO (20s) & ASSESSMENT (3s) ---
-        print("[HUB] AUTO (20s)")
+        #print("[HUB] AUTO (20s)")
+        self.talon.start(0.6) #ToDo: not tested yet
         self.is_active = True
         self.is_blink = False
         start_time = time.time()
@@ -176,7 +180,14 @@ class HubHardware:
 
         print("[HUB] Match Complete")
         self.ack_received = False
+        
+        time.sleep(3)
+        self.talon.stop()
 
-    #def cleanup(self):
+    def cleanup(self):
+        self.is_active = False
+        self.led_animator()
+        self.talon.stop()
     #    if HAS_GPIO and self.sensor_pins:
     #        GPIO.cleanup()
+
