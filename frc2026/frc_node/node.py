@@ -64,6 +64,10 @@ class FRC2026Node:
         #self.gui = ScoreboardGUI(self)
         #self.panic_button = PanicButton(self)
 
+    def report_hub_data(self, addr, alliance, ball_count):
+        #with self.handshake_lock:
+        self.alliance_scores[alliance] = int(ball_count)
+            
     def process_hub_data(self, addr, alliance, ball_count):
         with self.handshake_lock:
             # Update the count for this specific hub address
@@ -91,7 +95,7 @@ class FRC2026Node:
                     else:
                         winner = self.auto_winner_mode
                     print(f"[FMS] Both Hubs reported. Auto Winner: {winner}")
-                self.networking.broadcast(f"AUTO_RESULT:{winner}")
+                self.networking.broadcast(f"AUTO_RESULT:{winner}\n")
             else:
                 print(f"[FMS] Waiting for second hub data... (Currently have {len(self.hub_counts)})")
 
@@ -117,8 +121,8 @@ class FRC2026Node:
         if not self.count_down(time.time(), auto_duration):
             return self.emergency_shutdown()
         self.sound_manager.play_cue("END_AUTO")
-        self.alliance_scores['R'] = random.randint(0, 50)
-        self.alliance_scores['B'] = random.randint(0, 50)
+        #self.alliance_scores['R'] = random.randint(0, 50)
+        #self.alliance_scores['B'] = random.randint(0, 50)
 
         # --- TRANSITION ---
         # Scoring assessment buffer
@@ -139,8 +143,8 @@ class FRC2026Node:
             if t < 110: self.sound_manager.play_cue("SHIFT")
             elif t == 110: self.sound_manager.play_cue("WHISTLE")
             elif t == 140: self.sound_manager.play_cue("ENDGAME")
-            self.alliance_scores['R'] = self.alliance_scores['R'] + random.randint(0, 50)
-            self.alliance_scores['B'] = self.alliance_scores['B'] + random.randint(0, 50)
+            #self.alliance_scores['R'] = self.alliance_scores['R'] + random.randint(0, 50)
+            #self.alliance_scores['B'] = self.alliance_scores['B'] + random.randint(0, 50)
 
         self.current_period = "POSTMATCH"
         #self.current_period_end_time = time.time()
@@ -164,7 +168,7 @@ class FRC2026Node:
         self.is_aborted = True
         self.match_in_progress = False
         self.current_period = "ABORTED"
-        self.networking.broadcast("GAME_STOP")
+        self.networking.broadcast("GAME_STOP\n")
         self.sound_manager.play_cue("STOP")
         self.hub_counts = {}
         #self.alliance_scores = {'R': 0, 'B': 0}
@@ -210,7 +214,7 @@ class FRC2026Node:
 #            self.is_aborted = True
 #            self.panic_event.set()
 #            # Broadcast immediately when the key is pressed
-#            self.networking.broadcast("GAME_STOP")
+#            self.networking.broadcast("GAME_STOP\n")
 
     # -------------------- Game Start --------------------
     def start_game(self):
@@ -235,7 +239,7 @@ class FRC2026Node:
                 self.match_in_progress = True              
                 #self.scoreboard.update(self.alliance_scores.get('B', 0), self.alliance_scores.get('R', 0), "2 / 6  :16")
                 print("[FMS] Starting game now!")
-                self.networking.broadcast("GAME_START")
+                self.networking.broadcast("GAME_START\n")
 
                 # Wait for 'S' to start instead of Enter to keep it consistent
                 #print("[FMS] Press 's' to start the match...")
@@ -250,6 +254,7 @@ class FRC2026Node:
                 #print("[FMS] Press 'p' to stop the match...")
                 print("[FMS] Press USB Button for EMERGENCY STOP...")
                 self.match_thread.join()
+                #self.match_thread.join(timeout=1.0) # AI suggested this
                 # Once master_loop ends (natually or aborted)
                 self.match_in_progress = False
                 print("[FMS] Displaying Final Results. Press USB Button to RESET TO PREMATCH...")
@@ -303,7 +308,20 @@ class FRC2026Node:
             print("[FMS] Shutting down.")
 
     def hub_loop_main(self):
-        self.networking.listen_for_server()
+        # 1. Attempt connection
+        if self.networking.connect():
+            # 2. Start the listener in a BACKGROUND thread
+            # This allows the listener to run while this function continues
+            listener = threading.Thread(target=self.networking.listen_for_server, daemon=True)
+            listener.start()
+            print("[HUB] Network listener is running in the background.")
+        else:
+            print("[HUB] Failed to connect. Check FMS IP and Network.")
+
+        # 3. Now the main thread can do other things, like a heart-beat or status check
+        while True:
+            # Keep the main process alive or do general status updates here
+            time.sleep(1)
 
     # -------------------- Run --------------------
     def run(self):

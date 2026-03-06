@@ -1,15 +1,9 @@
 import time
 import threading
-#import math
-import random
-#try:
-#    import RPi.GPIO as GPIO
-#    HAS_GPIO = True
-#except ImportError:
-#    HAS_GPIO = False
-#from pi5neo import Pi5Neo  # enable on HUBs
+#import random
 from .led import LedManager
 from .motor_controller import TalonPWM
+from .ball_counter import BallCounter
 
 class HubHardware:
     def __init__(self, cfg, node):
@@ -17,18 +11,29 @@ class HubHardware:
         self.node = node
         self.is_active = False
         self.is_blink = False
-        self.balls_detected = random.randint(50,300)
+        #self.balls_detected = random.randint(50,300)
+
+        # LED
         self.strip = LedManager(150)
         self.color = (255,0,0) if cfg['alliance']=="RED" else (0,0,255)
         self.my_alliance = "R" if cfg['alliance']=="RED" else "B"
+        # Motor
+        self.motor_pin = cfg.get("motor_pin", 18)
+        self.talon = TalonPWM(self.motor_pin)
+        # Ball Counter Integration
+        sensor_pins = cfg.get("sensor_pins", [22, 23, 24, 25])
+        self.ball_counter = BallCounter(self, pins=sensor_pins, grace_period=3.0)
+        # Signal/Event Setup
         self.auto_winner = None
         self.ack_received = False
         self.teleop_ready_signal = threading.Event()
         self.ack_received_signal = threading.Event()
 
-        self.motor_pin = cfg.get("motor_pin", 18)
-        self.talon = TalonPWM(self.motor_pin)
-        #self.sensor_pins = cfg.get("sensor_pins", [])
+        # Start the score background reporter
+        self.stop_reporter = threading.Event()
+        self.reporter_thread = threading.Thread(target=self._score_reporter_loop, daemon=True)
+        self.reporter_thread.start()
+
         #if HAS_GPIO and self.sensor_pins:
         #    GPIO.setmode(GPIO.BCM)
         #    for pin in self.sensor_pins:
@@ -36,10 +41,25 @@ class HubHardware:
         #        GPIO.add_event_detect(pin, GPIO.FALLING,
         #                              callback=self.on_ball_detected, bouncetime=150)
 
-    def on_ball_detected(self, channel):
-        self.balls_detected +=1
-        #self.flash_led()
-        print(f"[HUB] Ball detected on pin {channel}")
+    def _score_reporter_loop(self):
+        """Runs in the background, sending the score every 1 second."""
+        while not self.stop_reporter.is_set():
+            # Only send if the node is active and not aborted
+            if not self.node.is_aborted:
+                try:
+                    # Format: HUB_SCORE:R:15
+                    score_msg = f"HUB_SCORE:{self.my_alliance}:{self.balls_detected}"
+                    self.node.networking.send_to_server(score_msg)
+                except Exception as e:
+                    print(f"[REPORTER] Network error: {e}")
+            
+            # Wait for 1 second (interruptible by the stop event)
+            self.stop_reporter.wait(1.0)
+
+    @property
+    def balls_detected(self):
+        """Used by existing networking code to get current valid total."""
+        return self.ball_counter.get_total_valid()
 
     def led_animator(self):
         if self.is_active:
@@ -95,23 +115,29 @@ class HubHardware:
         print("[HUB] !!! ABORTING HUB LOOP !!!")
         self.is_active = False
         self.led_animator()
+        self.talon.stop()
+        self.ball_counter.reset()
         self.ack_received = False
         # If you have a buzzer or specific 'stop' animation, trigger it here
         return False
 
     def hub_loop(self):
         # --- 1. AUTO (20s) & ASSESSMENT (3s) ---
-        #print("[HUB] AUTO (20s)")
+        print("[HUB] AUTO (20s)")
         self.talon.start(0.6) #ToDo: not tested yet
+        self.ball_counter.reset()
+        self.ball_counter.switch_phase("AUTO")
         self.is_active = True
         self.is_blink = False
         start_time = time.time()
         self.led_blink(start_time, 20)
         #---- sleep 3 seconds
         if not self.interruptible_sleep(3): return self.emergency_shutdown()
+        auto_balls_detected = self.balls_detected
 
         # --- 2. TRANSITION & HANDSHAKE (10s) ---
         print("[HUB] TELEOP (10s)")
+        self.ball_counter.switch_phase("TRANSITION")
         self.is_active = True
         self.led_animator()
         transition_start = time.time()
@@ -123,18 +149,14 @@ class HubHardware:
 
             # If FMS hasn't ACKed yet, retry every 2 seconds
             if not self.ack_received and (time.time() - last_retry > 2.0):
-                print(f"[HUB] Sending ball count ({self.balls_detected})...")
-                if self.my_alliance == "R":
-                    self.node.networking.send_to_server(f"HUB_SCORE:R:{self.balls_detected}")
-                else:
-                    self.node.networking.send_to_server(f"HUB_SCORE:B:{self.balls_detected}")
-
+                score_msg = f"HUB_AUTO_SCORE:{self.my_alliance}:{auto_balls_detected}"
+                print(score_msg)
+                self.node.networking.send_to_server(score_msg)
                 last_retry = time.time()
 
             # Check if the FMS received the ball count
             if self.ack_received_signal.is_set():
                self.ack_received = True
-
             time.sleep(0.05)
         # Check if the FMS broadcasted the final AUTO_RESULT
         if not self.teleop_ready_signal.is_set():
@@ -160,6 +182,7 @@ class HubHardware:
         for i, shift in enumerate(shifts, 1):
             # Determine Activity based on Table 6-3 logic
             # If we won Auto, we are inactive on odd shifts (1, 3)
+            self.ball_counter.switch_phase(shift['name'])
             is_odd = (i % 2 != 0)
             self.is_active = not is_odd if won_auto else is_odd
             print(f"[HUB] {shift['name']} - Active: {self.is_active}")
@@ -174,6 +197,7 @@ class HubHardware:
         # --- 4. ENDGAME --- (Final 30s)
         # Table 6-3: Both Hubs are ALWAYS active during End Game
         print("[HUB] ENDGAME (30s)")
+        self.ball_counter.switch_phase("ENDGAME")
         self.is_active = True
         self.is_blink = False
         self.led_blink(time.time(), 30)
@@ -181,13 +205,18 @@ class HubHardware:
         print("[HUB] Match Complete")
         self.ack_received = False
         
-        time.sleep(3)
+        self.is_active = False
+        print("[HUB] Match Over. Final 3s Grace Period...")
+        self.interruptible_sleep(3) # Wait for final endgame balls
         self.talon.stop()
+        self.ball_counter.reset()
 
     def cleanup(self):
         self.is_active = False
         self.led_animator()
         self.talon.stop()
+        # Stop the reporting thread when the node shuts down
+        self.stop_reporter.set()
+        self.reporter_thread.join(timeout=1.0)
     #    if HAS_GPIO and self.sensor_pins:
     #        GPIO.cleanup()
-

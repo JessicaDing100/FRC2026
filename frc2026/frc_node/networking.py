@@ -29,33 +29,35 @@ class Server:
         self.node.client_count += 1
         if self.node.client_count == self.node.client_number:
             self.node.client_all_connected_event.set()
-        
+
+        buffer = "" # NEW: Buffer to store partial data
         connected = True
         while connected:
-            #print(connected)
             try:
-                msg = conn.recv(1024).decode(self.FORMAT)
-                if not msg: break
-                #raw_len = conn.recv(self.HEADER)
-                #print(raw_len)
-                #if not raw_len: 
-                #    break
-                #msg_len = int(raw_len.decode(self.FORMAT).strip())
-                #msg = conn.recv(msg_len).decode(self.FORMAT)
-                #print(msg)
-                print(f"[CLIENT {addr}] {msg}")
-                if ":" in msg:
-                    header, alliance, val = msg.split(":")
-                    if header == "HUB_SCORE":
-                        self.node.process_hub_data(addr, alliance, val)
-                        conn.send("DATA_ACK".encode(self.FORMAT))
-                elif msg == self.DISCONNECT_MESSAGE:
-                    connected = False
-                #if msg.startswith("SCORE:"):
-                #    score = int(msg.split(":")[1])
-                #    with self.node.score_lock:
-                #        self.node.scores[addr] = score
-                #conn.send("Msg received".encode(self.FORMAT))
+                data = conn.recv(1024).decode(self.FORMAT)
+                if not data: break
+                
+                buffer += data
+                # NEW: Process every complete message in the buffer
+                while "\n" in buffer:
+                    msg, buffer = buffer.split("\n", 1)
+                    msg = msg.strip()
+                    if not msg: continue
+
+                    #print(f"[CLIENT {addr}] {msg}")
+
+                    if ":" in msg:
+                        parts = msg.split(":")
+                        if len(parts) == 3:
+                            header, alliance, val = parts
+                            if header == "HUB_AUTO_SCORE":
+                                self.node.process_hub_data(addr, alliance, val)
+                                conn.send("DATA_ACK\n".encode(self.FORMAT))
+                            elif header == "HUB_SCORE":
+                                self.node.report_hub_data(addr, alliance, val)
+
+                    elif msg == self.DISCONNECT_MESSAGE:
+                        connected = False            
             except Exception as e:
                 print(f"[ERROR] Client {addr}: {e}")
                 break
@@ -73,42 +75,85 @@ class Client:
         self.cfg = cfg
         self.node = node
         self.FORMAT = 'utf-8'
+        self.net_lock = threading.Lock()
+
+        # Initialize socket
         self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.client.connect((cfg.get('server_ip','10.17.0.162'), cfg.get("port",5000)))
-    
+        self.server_ip = cfg.get('server_ip', '10.17.0.162')
+        self.port = cfg.get("port", 5000)
+
+    def connect(self):
+        """Attempts to connect to the FMS server."""
+        try:
+            print(f"[HUB] Connecting to FMS at {self.server_ip}:{self.port}...")
+            self.client.connect((self.server_ip, self.port))
+            print("[HUB] Connected successfully.")
+            return True
+        except Exception as e:
+            print(f"[HUB] Connection failed: {e}")
+            return False
+
     def send_to_server(self, msg):
-        try: self.client.send(msg.encode(self.FORMAT))
-        except: pass
+        """Sends a message with a newline delimiter for framing."""
+        try:
+            with self.net_lock:
+                # strip() ensures we don't send "MSG\n\n" if game logic added a \n
+                full_msg = f"{msg.strip()}\n"
+                self.client.send(full_msg.encode(self.FORMAT))
+        except Exception as e:
+            print(f"[CLIENT] Send error: {e}")
 
     def listen_for_server(self):
+        """Listens for FMS commands and processes them using a buffer."""
         print("[HUB] Listening to server...")
+        buffer = ""
+
         while True:
             try:
-                msg = self.client.recv(1024).decode(self.FORMAT)
-                if not msg: break
+                # Receive raw data from the stream
+                data = self.client.recv(1024).decode(self.FORMAT)
+                if not data:
+                    print("[HUB] Server closed connection.")
+                    break
 
-                if msg == "GAME_START":
-                    print("[HUB] Match signal received!")
-                    # START THE LOOP IN A THREAD
-                    # This allows the 'while True' listener to keep running
-                    self.node.is_aborted = False # Reset flag
-                    threading.Thread(target=self.node.hub_loop, daemon=True).start()
-                elif msg == "DATA_ACK":
-                    print("[HUB] FMS confirmed receipt of data.")
-                    # Optional: trigger a small green LED flash on the hub here
-                    self.node.hub_hardware.ack_received_signal.set()
-                elif msg.startswith("AUTO_RESULT:"):
-                    self.node.hub_hardware.auto_winner = msg.split(":")[1]
-                    self.node.hub_hardware.teleop_ready_signal.set()
-                elif msg == "GAME_STOP":
-                    print("[HUB] !!! EMERGENCY STOP RECEIVED !!!")
-                    # Set the flag that your master_loop is checking
-                    self.node.is_aborted = True
-                    self.node.hub_hardware.teleop_ready_signal.clear()
-                    self.node.hub_hardware.ack_received_signal.clear()
-                    # Optional: notify your node's event object if using one
-                    self.node.panic_event.set()
+                buffer += data
+
+                # Process all complete messages in the buffer
+                while "\n" in buffer:
+                    msg_raw, buffer = buffer.split("\n", 1)
+                    msg = msg_raw.strip()
+
+                    if not msg:
+                        continue
+
+                    # --- Command Dispatch ---
+                    if msg == "GAME_START":
+                        print("[HUB] Match signal received!")
+                        self.node.is_aborted = False
+                        # Run hub hardware logic in a separate thread
+                        threading.Thread(target=self.node.hub_loop, daemon=True).start()
+
+                    elif msg == "DATA_ACK":
+                        print("[HUB] FMS confirmed receipt of data.")
+                        self.node.hub_hardware.ack_received_signal.set()
+
+                    elif msg.startswith("AUTO_RESULT:"):
+                        winner = msg.split(":")[1]
+                        print(f"[HUB] Auto result received: {winner}")
+                        self.node.hub_hardware.auto_winner = winner
+                        self.node.hub_hardware.teleop_ready_signal.set()
+
+                    elif msg == "GAME_STOP":
+                        print("[HUB] !!! EMERGENCY STOP RECEIVED !!!")
+                        self.node.is_aborted = True
+                        # Reset hardware signals immediately
+                        self.node.hub_hardware.teleop_ready_signal.clear()
+                        self.node.hub_hardware.ack_received_signal.clear()
+                        self.node.panic_event.set()
+
+                    else:
+                        print(f"[HUB] Unknown command: {repr(msg)}")
+
             except Exception as e:
-                print(f"[HUB] Error: {e}")
+                print(f"[HUB] Receiver loop error: {e}")
                 break
-
