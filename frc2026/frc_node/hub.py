@@ -45,7 +45,7 @@ class HubHardware:
         """Runs in the background, sending the score every 1 second."""
         while not self.stop_reporter.is_set():
             # Only send if the node is active and not aborted
-            if not self.node.is_aborted:
+            if self.node.match_in_progress:
                 try:
                     # Format: HUB_SCORE:R:15
                     score_msg = f"HUB_SCORE:{self.my_alliance}:{self.balls_detected}"

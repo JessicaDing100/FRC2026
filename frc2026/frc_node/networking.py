@@ -130,6 +130,7 @@ class Client:
                     if msg == "GAME_START":
                         print("[HUB] Match signal received!")
                         self.node.is_aborted = False
+                        self.node.match_in_progress = True
                         # Run hub hardware logic in a separate thread
                         threading.Thread(target=self.node.hub_loop, daemon=True).start()
 
@@ -146,6 +147,7 @@ class Client:
                     elif msg == "GAME_STOP":
                         print("[HUB] !!! EMERGENCY STOP RECEIVED !!!")
                         self.node.is_aborted = True
+                        self.node.match_in_progress = False
                         # Reset hardware signals immediately
                         self.node.hub_hardware.teleop_ready_signal.clear()
                         self.node.hub_hardware.ack_received_signal.clear()
