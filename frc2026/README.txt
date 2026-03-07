@@ -9,12 +9,14 @@ frc2026/
 │   ├─ networking.py        # Server/Client networking
 │   ├─ hub.py               # HUB loop control (LEDs, GPIO, sensors)
 │   ├─ led.py               # HUB LEDs
+│   ├─ motor_controller.py  # HUB motor controller
+│   ├─ ball_counter.py      # HUB ball count sensor controller
 │   ├─ sound.py             # SoundManager for cues
 │   ├─ button.py            # PanicButton
 │   ├─ gui_config.py        # ConfigGUI
 │   └─ gui_scoreboard.py    # ScoreboardGUI
 │
-
+├─ stand_alone_test/        # Stand alone test files
 └─ wav_files/               # All sound files
 Note: match_powerup.wav found from https://github.com/Team254/cheesy-arena/commit/19f168147710f02d770495f09c15399ac2e88268
 
@@ -29,6 +31,7 @@ Hub → Hardware: Switches to Table 6-3 behavior based on being the winner or lo
 In hub_loop, if FMS doesn't receive the DATA_ACK within 2 seconds of sennding ball count, 
 the Hub re-send the message. 
 This ensures the FMS eventually gets the data even if there was a momentary signal drop.
+
 
 
 
