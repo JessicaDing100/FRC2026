@@ -6,6 +6,7 @@ frc2026/
 ├─ frc_node/
 │   ├─ __init__.py
 │   ├─ node.py              # Main FRC2026Node class
+│   ├─ constants.py         # Game constants
 │   ├─ networking.py        # Server/Client networking
 │   ├─ hub.py               # HUB loop control (LEDs, GPIO, sensors)
 │   ├─ led.py               # HUB LEDs
@@ -19,6 +20,9 @@ frc2026/
 ├─ stand_alone_test/        # Stand alone test files
 └─ wav_files/               # All sound files
 Note: match_powerup.wav found from https://github.com/Team254/cheesy-arena/commit/19f168147710f02d770495f09c15399ac2e88268
+
+Instruction on how to set up and run the test
+https://docs.google.com/document/d/1tTCYkhVjq9Jm_qxmjLCPUJRNu3Vym5AT5QZuOiG0GgA/edit?tab=t.0
 
 
 The Full "Double Handshake" Flow
