@@ -2,18 +2,14 @@
     "role": "HUB",
     "alliance": "RED",
     "port": 5000,
-    "server_ip": "10.17.0.141",
+    "server_ip": "10.17.0.162",
     "led_pin": 10,
+    "led_count": 150,
     "motor_pin": 18,
+    "motor_speed": 0.6,
     "sensor_pins": [22, 23, 24, 25],
     "sound_path": "./wav_files/",
-    "panic_button": {                  
-        "enabled": true,
-        "method": "auto"
-    },
-    "gui": {
-        "enabled": true,
-        "refresh_rate_ms": 500
-    }
-
+    "button_path": "/dev/input/by-id/usb-LinTx_LinTx_Keyboard_BE2F48FE-if01-event-kbd",
+    "TRANSITION_DURATION": 20,
+    "GRACE_PERIOD": 20
 }

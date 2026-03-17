@@ -2,9 +2,9 @@ import threading
 from evdev import InputDevice, categorize, ecodes
 
 class USBPanicButton:
-    def __init__(self):
-        #ToDo: move this path to config file?
-        self.device_path = '/dev/input/by-id/usb-LinTx_LinTx_Keyboard_BE2F48FE-if01-event-kbd'
+    def __init__(self,cfg):
+        button_id = cfg.get("button_path")
+        self.device_path = button_id
         self.dev = None
         self._initialize_device()
 

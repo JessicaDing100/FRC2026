@@ -12,6 +12,7 @@ from .sound import SoundManager
 #from .gui import MatchLogger
 from .button import USBPanicButton
 from .gui_scoreboard import ScoreboardGUI
+from .constants import MatchConstants as Const
 
 class FRC2026Node:
     def __init__(self, config_path="config.json"):
@@ -20,6 +21,8 @@ class FRC2026Node:
             raise FileNotFoundError(f"Config file '{config_path}' not found.")
         with open(config_path) as f:
             self.cfg = json.load(f)
+        # Update the Class Constant with the JSON value for ball count delay
+        Const.TRANSITION_DURATION = self.cfg.get('TRANSITION_DURATION', Const.TRANSITION_DURATION)
 
         # -------------------- Shared State --------------------
         self.connected_clients = []
@@ -48,7 +51,7 @@ class FRC2026Node:
         if self.cfg['role'] == "FMS":
             self.networking = Server(self.cfg, self)
             self.sound_manager = SoundManager(self.cfg)
-            self.physical_button = USBPanicButton()
+            self.physical_button = USBPanicButton(self.cfg)
             self.physical_button.start_listening(callback=self.handle_physical_button)
 
             #self.scoreboard = Scoreboard()
@@ -114,7 +117,7 @@ class FRC2026Node:
         self.alliance_scores = {'R': 0, 'B': 0}
         # --- AUTONOMOUS ---
         self.current_period = "AUTONOMOUS"
-        auto_duration = 20
+        auto_duration = Const.AUTO_DURATION
         self.current_period_end_time = time.time() + auto_duration
         #start_time = time.time()
         self.sound_manager.play_cue("START")
@@ -127,22 +130,22 @@ class FRC2026Node:
         # --- TRANSITION ---
         # Scoring assessment buffer
         self.current_period = "TRANSITION"
-        if not self.interruptible_sleep(3):
+        if not self.interruptible_sleep(Const.TRANSITION_DURATION):
             return self.emergency_shutdown()
 
         # --- TELEOP ---
         self.current_period = "TELEOP"
-        teleop_duration = 140
+        teleop_duration = Const.TELEOP_TOTAL
         self.current_period_end_time = time.time() + teleop_duration
         start_time = time.time()
         self.sound_manager.play_cue("TELEOP")
-        for t in [10, 35, 60, 85, 110, 140]:
+        milestones = sorted(Const.TELEOP_SHIFTS.keys())
+        for t in milestones:
             if not self.count_down(start_time, t):
                 return self.emergency_shutdown()
-            #print(t)
-            if t < 110: self.sound_manager.play_cue("SHIFT")
-            elif t == 110: self.sound_manager.play_cue("WHISTLE")
-            elif t == 140: self.sound_manager.play_cue("ENDGAME")
+            # Get the sound key associated with this specific milestone
+            sound_key = Const.TELEOP_SHIFTS[t]
+            self.sound_manager.play_cue(sound_key)
             #self.alliance_scores['R'] = self.alliance_scores['R'] + random.randint(0, 50)
             #self.alliance_scores['B'] = self.alliance_scores['B'] + random.randint(0, 50)
 

@@ -4,6 +4,7 @@ import threading
 from .led import LedManager
 from .motor_controller import TalonPWM
 from .ball_counter import BallCounter
+from .constants import MatchConstants as Const
 
 class HubHardware:
     def __init__(self, cfg, node):
@@ -12,17 +13,21 @@ class HubHardware:
         self.is_active = False
         self.is_blink = False
         #self.balls_detected = random.randint(50,300)
+        Const.TRANSITION_DURATION = cfg.get('TRANSITION_DURATION', Const.TRANSITION_DURATION)
 
         # LED
-        self.strip = LedManager(150)
+        self.led_count = cfg.get("led_count", 150)
+        self.strip = LedManager(self.led_count)
         self.color = (255,0,0) if cfg['alliance']=="RED" else (0,0,255)
         self.my_alliance = "R" if cfg['alliance']=="RED" else "B"
         # Motor
         self.motor_pin = cfg.get("motor_pin", 18)
+        self.motor_speed = cfg.get("motor_speed", 0.6)
         self.talon = TalonPWM(self.motor_pin)
         # Ball Counter Integration
         sensor_pins = cfg.get("sensor_pins", [22, 23, 24, 25])
-        self.ball_counter = BallCounter(self, pins=sensor_pins, grace_period=3.0)
+        self.grace_period = cfg.get("GRACE_PERIOD", 3)
+        self.ball_counter = BallCounter(self, pins=sensor_pins, grace_period=self.grace_period)
         # Signal/Event Setup
         self.auto_winner = None
         self.ack_received = False
@@ -122,17 +127,18 @@ class HubHardware:
         return False
 
     def hub_loop(self):
-        # --- 1. AUTO (20s) & ASSESSMENT (3s) ---
-        print("[HUB] AUTO (20s)")
-        self.talon.start(0.6) #ToDo: not tested yet
+        # --- 1. AUTO (Const.AUTO_DURATION) & ASSESSMENT (Const.TRANSITION_DURATION) ---
+        print(f"[HUB] AUTO ({Const.AUTO_DURATION}s)")
+        self.talon.start(self.motor_speed)
         self.ball_counter.reset()
         self.ball_counter.switch_phase("AUTO")
         self.is_active = True
         self.is_blink = False
         start_time = time.time()
-        self.led_blink(start_time, 20)
-        #---- sleep 3 seconds
-        if not self.interruptible_sleep(3): return self.emergency_shutdown()
+        self.led_blink(start_time, Const.AUTO_DURATION)
+        #---- sleep Const.TRANSITION_DURATION seconds
+        print(f"[HUB] TRANSITION ({Const.TRANSITION_DURATION}s)")
+        if not self.interruptible_sleep(Const.TRANSITION_DURATION): return self.emergency_shutdown()
         auto_balls_detected = self.balls_detected
 
         # --- 2. TRANSITION & HANDSHAKE (10s) ---
@@ -171,43 +177,51 @@ class HubHardware:
         self.led_blink(time.time(), 5)
 
         # --- 3. TELEOP SHIFTS --- (Table 6-3)
-        # Each Shift is 25 seconds (example duration)
-        shifts = [
-            {"name": "SHIFT 1", "duration": 25},
-            {"name": "SHIFT 2", "duration": 25},
-            {"name": "SHIFT 3", "duration": 25},
-            {"name": "SHIFT 4", "duration": 25}
-        ]
+        # Get sorted milestones: [10, 35, 60, 85, 110, 140]
+        milestones = sorted(Const.TELEOP_SHIFTS.keys())
+        prev_time = milestones[0]
 
-        for i, shift in enumerate(shifts, 1):
+        # Each Shift is 25 seconds (example duration)
+        #shifts = [
+        #    {"name": "SHIFT 1", "duration": 25},
+        #    {"name": "SHIFT 2", "duration": 25},
+        #    {"name": "SHIFT 3", "duration": 25},
+        #    {"name": "SHIFT 4", "duration": 25}
+        #]
+
+        for i, t in enumerate(milestones[1:5], 1):
+            duration = t - prev_time
+            phase_name = f"SHIFT_{i}"
+            self.ball_counter.switch_phase(phase_name)
             # Determine Activity based on Table 6-3 logic
             # If we won Auto, we are inactive on odd shifts (1, 3)
-            self.ball_counter.switch_phase(shift['name'])
             is_odd = (i % 2 != 0)
             self.is_active = not is_odd if won_auto else is_odd
-            print(f"[HUB] {shift['name']} - Active: {self.is_active}")
+            print(f"[HUB] {phase_name} | Start: {prev_time}s | End: {t}s | Active: {self.is_active}")
             if i == 4:
                 self.is_blink = False
             else:
                 self.is_blink = True
+            #print(self.is_blink)
             # Run the shift timer
-            start_shift = time.time()
-            self.led_blink(start_shift, shift['duration'] )
+            self.led_blink(time.time(), duration)
+            prev_time = milestones[i]
 
         # --- 4. ENDGAME --- (Final 30s)
         # Table 6-3: Both Hubs are ALWAYS active during End Game
-        print("[HUB] ENDGAME (30s)")
+        endgame_duration = Const.TELEOP_TOTAL - prev_time # 140 - 110 = 30
+        print(f"[HUB] ENDGAME ({endgame_duration}s)")
         self.ball_counter.switch_phase("ENDGAME")
         self.is_active = True
         self.is_blink = False
-        self.led_blink(time.time(), 30)
+        self.led_blink(time.time(), endgame_duration)
 
         print("[HUB] Match Complete")
         self.ack_received = False
         
         self.is_active = False
-        print("[HUB] Match Over. Final 3s Grace Period...")
-        self.interruptible_sleep(3) # Wait for final endgame balls
+        print(f"[HUB] Match Over. Final ({self.grace_period}s) Grace Period...")
+        self.interruptible_sleep(self.grace_period) # Wait for final endgame balls
         self.talon.stop()
         self.ball_counter.reset()
 

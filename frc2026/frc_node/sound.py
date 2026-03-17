@@ -5,7 +5,9 @@ class SoundManager:
     def __init__(self, cfg):
         pygame.mixer.init()
         self.sounds = {}
-        base_path=os.path.join(os.path.dirname(__file__),"../wav_files")
+        sound_dir = cfg.get("sound_path", "./wav_files/")
+        base_path = os.path.abspath(sound_dir)
+        #base_path=os.path.join(os.path.dirname(__file__),"../wav_files")
         sound_files={
             "START": "start_CalvaryCharge.wav",
             "END_AUTO": "end_Buzzer.wav",
@@ -25,4 +27,3 @@ class SoundManager:
     def play_cue(self,name):
         if name in self.sounds:
             self.sounds[name].play()
-
